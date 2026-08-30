@@ -1,0 +1,2 @@
+import { AppShell } from "@/components/app-shell";import { requireUser } from "@/lib/auth";
+export default async function PanelLayout({children}:{children:React.ReactNode}){const{profile,email}=await requireUser();return <AppShell name={profile?.display_name||email.split("@")[0]||"Usuario"} role={roleName(profile?.role)}>{children}</AppShell>}function roleName(role?:string){return({administrator:"Administrador",director:"Directiva",collaborator:"Colaborador",member:"Socio"}as Record<string,string>)[role||""]||"Usuario"}
