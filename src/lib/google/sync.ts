@@ -1,6 +1,7 @@
 import 'server-only';
 import { randomUUID } from 'node:crypto';
 import { accessToken, adminClient, people, personFields, type Person } from './server';
+import { readLinkedContacts } from './batch';
 import { fields, mergeContact, normalizeEmail, sameContact, type ContactData } from './merge';
 type Member=ContactData & {id:string;updated_at:string;google_resource_name:string|null};
 function contact(person:Person):ContactData {return {first_name:person.names?.[0]?.givenName || '',last_name:person.names?.[0]?.familyName || '',email:person.emailAddresses?.[0]?.value || null,phone:person.phoneNumbers?.[0]?.value || null};}
@@ -18,12 +19,13 @@ export async function syncContacts() {
     }while(pageToken);
     const {data:members,error}=await db.from('members').select('id,first_name,last_name,email,phone,updated_at,google_resource_name').neq('status','inactive_member');if(error)throw error;
     const {data:links,error:linkError}=await db.from('google_contact_links').select('*');if(linkError)throw linkError;
-    const byResource=new Map(all.map(p=>[p.resourceName,p]));const used=new Set((links||[]).map(l=>l.resource_name));
+    const byResource=await readLinkedContacts((links||[]).map(l=>l.resource_name),(path)=>people(token,path));const used=new Set((links||[]).map(l=>l.resource_name));
     for(const member of (members||[]) as Member[]) {
       const link=links?.find(l=>l.member_id===member.id);let remote:Person|undefined;
       if(link) {
         // Read the linked contact directly; directory listings may lag behind edits.
-        remote=await people<Person>(token,`${link.resource_name}?personFields=${personFields}&sources=READ_SOURCE_TYPE_CONTACT`);
+        remote=byResource.get(link.resource_name);
+        if(!remote){conflicts.push(`${member.first_name} ${member.last_name}: contacto no disponible en Google; ficha conservada`);continue;}
         if(remote.metadata?.deleted){conflicts.push(`${member.first_name} ${member.last_name}: contacto eliminado en Google; ficha conservada`);continue;}
       }
       else {
