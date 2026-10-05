@@ -1,4 +1,5 @@
 import 'server-only';
+import { googleRequest } from './request';
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
 import { requireUser } from '@/lib/auth';
@@ -18,7 +19,5 @@ export async function accessToken() {
 export type Person = {resourceName:string;etag?:string;metadata?:{deleted?:boolean;sources?:{type:string;id:string;etag?:string}[]};names?:{givenName?:string;familyName?:string;displayName?:string}[];emailAddresses?:{value:string;type?:string}[];phoneNumbers?:{value:string;type?:string}[]};
 export const personFields='names,emailAddresses,phoneNumbers,metadata';
 export async function people<T>(token:string,path:string,method='GET',body?:unknown):Promise<T> {
-  const response=await fetch(`https://people.googleapis.com/v1/${path}`,{method,headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body),cache:'no-store',signal:AbortSignal.timeout(15000)});
-  if(!response.ok) throw new Error(`Google Contacts: error ${response.status}. Vuelve a sincronizar; no se sobrescribieron cambios en conflicto.`);
-  return response.json();
+  return googleRequest<T>(`https://people.googleapis.com/v1/${path}`,{method,headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body),cache:'no-store'});
 }
