@@ -1,0 +1,6 @@
+.button:disabled{cursor:wait;opacity:.75;transform:none}
+.spinner{flex-shrink:0;animation:spin 1s linear infinite}
+.status{display:block;color:var(--muted);font-size:14px;margin-top:8px}
+.status:empty{display:none}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.spinner{animation:none}}
