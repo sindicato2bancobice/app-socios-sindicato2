@@ -21,7 +21,11 @@ export async function syncContacts() {
     const byResource=new Map(all.map(p=>[p.resourceName,p]));const used=new Set((links||[]).map(l=>l.resource_name));
     for(const member of (members||[]) as Member[]) {
       const link=links?.find(l=>l.member_id===member.id);let remote:Person|undefined;
-      if(link) {remote=byResource.get(link.resource_name);if(!remote){conflicts.push(`${member.first_name} ${member.last_name}: contacto eliminado en Google; ficha conservada`);continue;}}
+      if(link) {
+        // Read the linked contact directly; directory listings may lag behind edits.
+        remote=await people<Person>(token,`${link.resource_name}?personFields=${personFields}&sources=READ_SOURCE_TYPE_CONTACT`);
+        if(remote.metadata?.deleted){conflicts.push(`${member.first_name} ${member.last_name}: contacto eliminado en Google; ficha conservada`);continue;}
+      }
       else {
         const email=normalizeEmail(member.email);if(!email){conflicts.push(`${member.first_name} ${member.last_name}: agrega un correo para evitar duplicados`);continue;}
         if(members!.filter(m=>normalizeEmail(m.email)===email).length>1){conflicts.push(`${member.first_name}: correo duplicado en la app`);continue;}
@@ -39,7 +43,7 @@ export async function syncContacts() {
       }
       const current=contact(remote);const base=(link?.snapshot || Object.fromEntries(fields.map(k=>[k,member[k]]))) as ContactData;
       const merge=mergeContact(base,member,current);if(merge.conflicts.length){conflicts.push(`${member.first_name} ${member.last_name}: conflicto en ${merge.conflicts.join(', ')}`);continue;}
-      if(!sameContact(merge.result,current)) {
+      if(!sameContact(member,base) && !sameContact(merge.result,current)) {
         const mask:string[]=[]; const body:Record<string,unknown>={metadata:remote.metadata,etag:remote.etag};
         // Preserve secondary emails/phones and fields outside the synchronization contract.
         if(merge.result.first_name!==current.first_name || merge.result.last_name!==current.last_name){mask.push('names');body.names=payload(merge.result).names;}
