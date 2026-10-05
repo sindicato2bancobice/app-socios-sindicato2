@@ -6,5 +6,9 @@ test('merge independent edits in both directions',()=>{const result=mergeContact
 test('detect concurrent changes to same field',()=>{assert.deepEqual(mergeContact(base,{...base,phone:'456'},{...base,phone:'789'}).conflicts,['phone']);});
 test('same concurrent edit is safe',()=>{assert.deepEqual(mergeContact(base,{...base,phone:'456'},{...base,phone:'456'}).conflicts,[]);});
 test('deletion of optional value propagates',()=>{assert.equal(mergeContact(base,base,{...base,phone:null}).result.phone,null);});
-test('required names cannot be erased',()=>{assert.ok(mergeContact(base,base,{...base,last_name:''}).conflicts.includes('name_required'));});
+test('required names cannot be erased',()=>{assert.ok(mergeContact(base,base,{...base,first_name:''}).conflicts.includes('name_required'));});
 test('email identity is case insensitive',()=>assert.equal(normalizeEmail(' ANA@EXAMPLE.CL '),'ana@example.cl'));
+
+test('Google phone edit is imported when app equals baseline',()=>{const previous={...base,phone:'999999999'};const remote={...previous,phone:'999999967'};const merged=mergeContact(previous,previous,remote);assert.deepEqual(merged.conflicts,[]);assert.equal(merged.result.phone,'999999967');});
+
+test('single-name imported contacts remain editable and syncable',()=>{const single={...base,last_name:''};assert.deepEqual(mergeContact(single,single,{...single,phone:'456'}).conflicts,[]);});

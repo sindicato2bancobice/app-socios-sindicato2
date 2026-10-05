@@ -1,0 +1,15 @@
+'use server';
+import { requireUser } from '@/lib/auth';
+import { redirect } from 'next/navigation';
+import { revalidatePath } from 'next/cache';
+export async function updateMember(form:FormData){
+  const {supabase,profile}=await requireUser();if(!profile?.active||!['administrator','director'].includes(profile.role))throw new Error('No autorizado');
+  const id=String(form.get('id')||'');const stamp=String(form.get('updated_at')||'');const value=(key:string)=>String(form.get(key)||'').trim();
+  const fail=(message:string)=>redirect(`/panel/personas/${encodeURIComponent(id)}?error=${encodeURIComponent(message)}`);
+  const status=value('status');if(!['active_member','adherent','inactive_member'].includes(status)||!value('first_name'))fail('Revisa el nombre y el estado');
+  const updates:Record<string,string|null>={status,first_name:value('first_name'),last_name:value('last_name')};
+  for(const key of ['rut','email','phone','birth_date','branch','department','job_title','bank_joined_at','union_joined_at'])updates[key]=value(key)||null;
+  if(updates.rut)updates.rut=updates.rut.toUpperCase();
+  const {data,error}=await supabase.from('members').update(updates).eq('id',id).eq('updated_at',stamp).select('id');if(error)fail('No fue posible guardar. Revisa los datos ingresados.');if(!data?.length)fail('La ficha cambió mientras la editabas. Recarga y revisa antes de guardar.');
+  revalidatePath('/panel');revalidatePath('/panel/personas');revalidatePath(`/panel/personas/${id}`);redirect(`/panel/personas/${id}?saved=1`);
+}
