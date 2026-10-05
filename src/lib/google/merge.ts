@@ -9,7 +9,7 @@ export function mergeContact(base: ContactData, local: ContactData, remote: Cont
     if (l !== b && r !== b && l !== r) conflicts.push(key);
     else if (r !== b) Object.assign(result, { [key]: remote[key] });
   }
-  if (!result.first_name || !result.last_name) conflicts.push('name_required');
+  if (!result.first_name) conflicts.push('name_required');
   return { result, conflicts };
 }
 export function sameContact(a: ContactData, b: ContactData) { return fields.every(key => (a[key] || '') === (b[key] || '')); }

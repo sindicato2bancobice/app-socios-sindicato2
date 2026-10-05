@@ -72,3 +72,17 @@ falta ajustar el tiempo de ejecución o mover el trabajo a una cola antes de pro
 
 Validación local: `npm run typecheck`, `npm run lint`, `npm run build` y
 `node --experimental-strip-types --test tests/google-merge.test.ts`.
+
+## Importar el directorio de socios de Google
+
+Aplica también `202610050002_google_import.sql`. En Google Contacts pulsa
+**Importar próximos 25 socios** y repite hasta que no queden pendientes.
+Todos los contactos nuevos se registran como socios activos por decisión de la
+directiva. No se inventan apellidos, RUT ni fechas. Los contactos sin nombre se
+omiten; las coincidencias por recurso, correo o teléfono previenen duplicados.
+Los datos diferentes en una ficha existente se conservan para revisión.
+
+Cada inserción crea ficha y vínculo en una transacción; reintentar conserva las
+fichas ya importadas. En Personas, pulsa el nombre para editar. El guardado usa
+control de versión para no sobrescribir una edición o sincronización concurrente.
+Los cambios de nombre, correo y teléfono se envían con Sincronizar ahora.
