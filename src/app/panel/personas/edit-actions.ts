@@ -1,4 +1,5 @@
 'use server';
+import { parseAddresses } from '@/lib/google/addresses';
 import { parseEmails } from '@/lib/google/details';
 import { requireUser } from '@/lib/auth';
 import { redirect } from 'next/navigation';
@@ -14,6 +15,7 @@ export async function updateMember(form:FormData){
   if(form.has('google_emails')){
     try{const emails=parseEmails(value('google_emails'));updates.google_emails=emails;updates.email=emails[0]?.value||null;}catch{fail('Revisa los correos y sus etiquetas.');}
   }
+  if(form.has('google_addresses')){try{updates.google_addresses=parseAddresses(value('google_addresses'));}catch{fail('Revisa los datos de las direcciones.');}}
   const {data,error}=await supabase.from('members').update(updates).eq('id',id).eq('updated_at',stamp).select('id');if(error)fail('No fue posible guardar. Revisa los datos ingresados.');if(!data?.length)fail('La ficha cambió mientras la editabas. Recarga y revisa antes de guardar.');
   revalidatePath('/panel');revalidatePath('/panel/personas');revalidatePath(`/panel/personas/${id}`);redirect(`/panel/personas/${id}?saved=1`);
 }

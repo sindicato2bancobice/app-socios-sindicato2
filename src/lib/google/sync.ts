@@ -1,15 +1,16 @@
 import 'server-only';
 import { randomUUID } from 'node:crypto';
 import { accessToken, adminClient, people, personFields, type Person } from './server';
-import { orderedEmails, writableEmails, mergeEmails, sameEmails, type GoogleEmail } from './details';
+import { writableAddresses, mergeAddresses, sameAddresses } from './addresses';
+import { orderedEmails, writableEmails, mergeEmails, sameEmails, type GoogleEmail, type GoogleAddress } from './details';
 import { chooseNewContact, identityType, linkedIdentity } from './identity';
 import { ensureStatusGroups, syncStatusLabels, type MemberStatus } from './labels';
 import { processDeletions } from './deletions';
 import { readLinkedContacts } from './batch';
 import { fields, mergeContact, sameContact, type ContactData } from './merge';
-type Member=ContactData & {id:string;status:MemberStatus;updated_at:string;google_resource_name:string|null;google_emails:GoogleEmail[]|null};
+type Member=ContactData & {id:string;status:MemberStatus;updated_at:string;google_resource_name:string|null;google_emails:GoogleEmail[]|null;google_addresses:GoogleAddress[]|null};
 function contact(person:Person):ContactData {return {first_name:person.names?.[0]?.givenName || '',last_name:person.names?.[0]?.familyName || '',email:orderedEmails(person.emailAddresses)[0]?.value || null,phone:person.phoneNumbers?.[0]?.value || null};}
-function payload(data:ContactData & {google_emails?:GoogleEmail[]|null}) { return {names:[{givenName:data.first_name,familyName:data.last_name}],emailAddresses:data.google_emails?writableEmails(data.google_emails):data.email?[{value:data.email,type:'work'}]:[],phoneNumbers:data.phone?[{value:data.phone,type:'mobile'}]:[]}; }
+function payload(data:ContactData & {google_emails?:GoogleEmail[]|null;google_addresses?:GoogleAddress[]|null}) { return {...(data.google_addresses?{addresses:writableAddresses(data.google_addresses)}:{}),names:[{givenName:data.first_name,familyName:data.last_name}],emailAddresses:data.google_emails?writableEmails(data.google_emails):data.email?[{value:data.email,type:'work'}]:[],phoneNumbers:data.phone?[{value:data.phone,type:'mobile'}]:[]}; }
 export async function syncContacts() {
   const db=adminClient(); const owner=randomUUID();
   const {data:locked,error:lockError}=await db.rpc('google_sync_acquire',{owner}); if(lockError)throw lockError;if(!locked)throw new Error('Ya hay una sincronización en curso');
@@ -26,7 +27,7 @@ export async function syncContacts() {
     do {const query=new URLSearchParams({personFields,pageSize:'1000',sources:'READ_SOURCE_TYPE_CONTACT'});if(pageToken)query.set('pageToken',pageToken);
       const page=await people<{connections?:Person[];nextPageToken?:string}>(token,`people/me/connections?${query}`);all.push(...(page.connections||[]).filter(p=>!excluded.has(p.resourceName)));pageToken=page.nextPageToken;
     }while(pageToken);
-    const {data:members,error}=await db.from('members').select('id,status,first_name,last_name,email,phone,updated_at,google_resource_name,google_emails');if(error)throw error;
+    const {data:members,error}=await db.from('members').select('id,status,first_name,last_name,email,phone,updated_at,google_resource_name,google_emails,google_addresses');if(error)throw error;
     const {data:links,error:linkError}=await db.from('google_contact_links').select('*');if(linkError)throw linkError;
     const byResource=await readLinkedContacts((links||[]).map(l=>l.resource_name),(path)=>people(token,path));const retired=new Set<string>();
     // Process confirmed remote removals before matching new fichas.
@@ -60,22 +61,25 @@ export async function syncContacts() {
         if(!remote) {
           remote=await people<Person>(token,`people:createContact?personFields=${personFields}`,'POST',{...payload(member),externalIds:[{type:identityType,value:member.id}]});
           // Persist identity immediately; a retry searches by app identifier if this write fails.
-          const {error:saveError}=await db.from('google_contact_links').insert({member_id:member.id,resource_name:remote.resourceName,snapshot:{...Object.fromEntries(fields.map(k=>[k,member[k]])),google_emails:orderedEmails(remote.emailAddresses)}});if(saveError)throw saveError;
+          const {error:saveError}=await db.from('google_contact_links').insert({member_id:member.id,resource_name:remote.resourceName,snapshot:{...Object.fromEntries(fields.map(k=>[k,member[k]])),google_emails:orderedEmails(remote.emailAddresses),google_addresses:remote.addresses||[]}});if(saveError)throw saveError;
           all.push(remote);byResource.set(remote.resourceName,remote);
         }
         used.add(remote.resourceName);
       }
       if(link)labelCandidates.set(member.id,remote);
-      const current=contact(remote);const base=(link?.snapshot || {...Object.fromEntries(fields.map(k=>[k,member[k]])),google_emails:orderedEmails(remote.emailAddresses)}) as ContactData & {google_emails?:GoogleEmail[]};
+      const current=contact(remote);const base=(link?.snapshot || {...Object.fromEntries(fields.map(k=>[k,member[k]])),google_emails:orderedEmails(remote.emailAddresses),google_addresses:remote.addresses||[]}) as ContactData & {google_emails?:GoogleEmail[];google_addresses?:GoogleAddress[]};
       const merge=mergeContact(base,member,current);if(merge.conflicts.length){conflicts.push(`${member.first_name} ${member.last_name}: conflicto en ${merge.conflicts.join(', ')}`);continue;}
       const remoteEmails=orderedEmails(remote.emailAddresses);
       const emailMerge=mergeEmails(base.google_emails,member.google_emails,remoteEmails,merge.result.email);
       if(emailMerge.conflict){conflicts.push(`${member.first_name} ${member.last_name}: conflicto en la lista de correos; revisa los cambios en Google y la app`);continue;}
-      if((!sameContact(member,base) && !sameContact(merge.result,current)) || !sameEmails(emailMerge.result,remoteEmails)) {
+      const addressMerge=mergeAddresses(base.google_addresses,member.google_addresses,remote.addresses||[]);
+      if(addressMerge.conflict){conflicts.push(`${member.first_name} ${member.last_name}: conflicto en las direcciones; revisa los cambios en Google y la app`);continue;}
+      if((!sameContact(member,base) && !sameContact(merge.result,current)) || !sameEmails(emailMerge.result,remoteEmails) || !sameAddresses(addressMerge.result,remote.addresses||[])) {
         const mask:string[]=[]; const body:Record<string,unknown>={metadata:remote.metadata,etag:remote.etag};
         // Preserve secondary emails/phones and fields outside the synchronization contract.
         if(merge.result.first_name!==current.first_name || merge.result.last_name!==current.last_name){mask.push('names');body.names=payload(merge.result).names;}
         if(!sameEmails(emailMerge.result,remoteEmails)){mask.push('emailAddresses');body.emailAddresses=writableEmails(emailMerge.result);}
+        if(!sameAddresses(addressMerge.result,remote.addresses||[])){mask.push('addresses');body.addresses=writableAddresses(addressMerge.result);}
         if(merge.result.phone!==current.phone){mask.push('phoneNumbers');body.phoneNumbers=[...payload(merge.result).phoneNumbers,...(remote.phoneNumbers||[]).slice(1)];}
         remote=await people<Person>(token,`${remote.resourceName}:updateContact?updatePersonFields=${mask.join(',')}&personFields=${personFields}`,'PATCH',body);
       }
@@ -84,7 +88,7 @@ export async function syncContacts() {
       merge.result.email=savedEmails[0]?.value||null;
       const {data:updated,error:updateError}=await db.from('members').update({...merge.result,...details,google_resource_name:remote.resourceName,google_etag:remote.etag,google_updated_at:new Date().toISOString()}).eq('id',member.id).eq('updated_at',member.updated_at).select('id');if(updateError)throw updateError;
       if(!updated?.length){conflicts.push(`${member.first_name}: la ficha cambió durante la sincronización; vuelve a sincronizar`);continue;}
-      const {error:saveError}=await db.from('google_contact_links').upsert({member_id:member.id,resource_name:remote.resourceName,snapshot:{...merge.result,google_emails:savedEmails}});if(saveError)throw saveError;labelCandidates.set(member.id,remote);synced++;
+      const {error:saveError}=await db.from('google_contact_links').upsert({member_id:member.id,resource_name:remote.resourceName,snapshot:{...merge.result,google_emails:savedEmails,google_addresses:remote.addresses||[]}});if(saveError)throw saveError;labelCandidates.set(member.id,remote);synced++;
     }
     // Refresh authoritative app states after data sync, including status edits made during the run.
     const {data:currentMembers,error:statusError}=await db.from('members').select('id,status');if(statusError)throw statusError;

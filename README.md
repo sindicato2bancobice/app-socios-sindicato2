@@ -167,3 +167,23 @@ Validación después del despliegue: sincronizar una ficha con varios correos y
 etiquetas personalizadas y con dos direcciones; revisar todos los datos en la app.
 Editar un correo secundario, sincronizar y verificarlo en Google; luego probar
 agregar/quitar uno y comprobar que se mantienen los restantes y las direcciones.
+
+## Direcciones editables y visitas sindicales
+
+Aplicar `20261006194711_address_sync_baseline.sql` antes de desplegar. Completa
+la referencia de direcciones de fichas existentes sin cambiar sus datos ni
+sobrescribir referencias previas. La ficha permite editar, agregar y quitar
+cualquier dirección y su etiqueta. Si aún no se cargaron desde Google, primero
+sincronizar para conservar los datos existentes.
+
+La sincronización compara la lista local y la de Google con la última versión.
+Cambios diferentes en ambos lados requieren revisión. Se actualiza únicamente
+el campo addresses con las direcciones completas; las otras direcciones,
+correos y etiquetas permanecen fuera de esa operación. Editar calle o casilla
+borra el texto formateado previo para que Google lo genere nuevamente.
+
+El directorio muestra las direcciones y permite filtrar por calle, número,
+localidad o región mientras se escribe, combinándolo con el estado del socio.
+Todos los términos deben coincidir dentro de una misma dirección; una persona
+se cuenta una sola vez aunque tenga varias coincidencias. El filtro usa
+cualquier dirección registrada, sin asumir que es laboral.

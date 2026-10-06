@@ -1,6 +1,7 @@
 'use client';
 
-import type { GoogleEmail } from '@/lib/google/details';
+import { matchesAddress, addressText } from '@/lib/google/addresses';
+import type { GoogleEmail, GoogleAddress } from '@/lib/google/details';
 import Link from 'next/link';
 import { Search, UsersRound } from 'lucide-react';
 import { useState } from 'react';
@@ -14,6 +15,7 @@ export type DirectoryPerson = {
   phone: string | null;
   branch: string | null;
   status: string;
+  google_addresses?: GoogleAddress[] | null;
   google_emails?: GoogleEmail[] | null;
 };
 
@@ -31,14 +33,16 @@ export function Directory({ people, canEdit, initialQuery, initialStatus }: {
   initialStatus: string;
 }) {
   const [query, setQuery] = useState(initialQuery);
+  const [addressQuery,setAddressQuery]=useState('');
   const [status, setStatus] = useState(initialStatus);
   const terms = normalize(query.trim()).split(/\s+/).filter(Boolean);
   const results = people.filter(person => {
+    if(!matchesAddress(person.google_addresses,addressQuery))return false;
     if (status && person.status !== status) return false;
     const fields = [person.first_name, person.last_name, `${person.first_name} ${person.last_name}`, person.rut, person.email, person.phone, ...(person.google_emails||[]).map(email=>email.value)].map(value => normalize(value || ''));
     return terms.every(term => fields.some(value => value.includes(term)));
   });
-  const filtered = Boolean(status || terms.length);
+  const filtered = Boolean(status || terms.length || addressQuery.trim());
 
   return <>
     <div className="filters">
@@ -52,22 +56,23 @@ export function Directory({ people, canEdit, initialQuery, initialStatus }: {
         <option value="adherent">Adherentes</option>
         <option value="inactive_member">Inactivos</option>
       </select>
-      <button type="button" className="button secondary" disabled={!query && !status} onClick={() => { setQuery(''); setStatus(''); }}>Limpiar filtros</button>
+      <button type="button" className="button secondary" disabled={!query && !status && !addressQuery} onClick={() => { setQuery(''); setStatus('');setAddressQuery(''); }}>Limpiar filtros</button>
     </div>
+    <div className="filters"><label className="search-field"><Search aria-hidden="true"/><input type="search" aria-label="Filtrar por dirección o comuna" value={addressQuery} onChange={event=>setAddressQuery(event.target.value)} placeholder="Dirección, calle, número, comuna o región"/></label></div>
     <div className="directory-summary" role="status" aria-live="polite" aria-atomic="true">
       <span>Total registrado: <strong>{people.length.toLocaleString('es-CL')}</strong> {people.length === 1 ? 'persona' : 'personas'}</span>
       {filtered && <span><strong>{results.length.toLocaleString('es-CL')}</strong> {results.length === 1 ? 'coincidencia' : 'coincidencias'}</span>}
     </div>
     <article className="card table-card">
       {results.length ? <div className="table-wrap"><table className="table">
-        <thead><tr><th>Persona</th><th>RUT</th><th>Contacto</th><th>Sucursal</th><th>Estado</th></tr></thead>
+        <thead><tr><th>Persona</th><th>RUT</th><th>Contacto</th><th>Sucursal</th><th>Direcciones</th><th>Estado</th></tr></thead>
         <tbody>{results.map(person => {
           const [label, css] = states[person.status] || [person.status, ''];
           return <tr key={person.id}>
             <td><div className="person-cell"><div className="person-avatar">{person.first_name[0]}{person.last_name[0]}</div>{canEdit ? <Link href={`/panel/personas/${person.id}`}><strong>{person.first_name} {person.last_name}</strong></Link> : <strong>{person.first_name} {person.last_name}</strong>}</div></td>
             <td>{person.rut || '—'}</td>
             <td><span>{person.email || '—'}</span><small>{person.phone}</small></td>
-            <td>{person.branch || '—'}</td>
+            <td>{person.branch || '—'}</td><td>{person.google_addresses?.length?person.google_addresses.map((address,i)=><div key={i}><span>{addressText(address)}</span><small>{address.formattedType||address.type||'Sin etiqueta'}</small></div>):'—'}</td>
             <td><span className={`badge ${css}`}>{label}</span></td>
           </tr>;
         })}</tbody>
