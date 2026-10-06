@@ -16,7 +16,7 @@ export default async function PeoplePage({ searchParams }: {
   let loadFailed = false;
   for (let offset = 0; ;) {
     const { data, error, count } = await supabase.from('members')
-      .select('id,first_name,last_name,rut,email,phone,branch,status', { count: 'exact' })
+      .select('id,first_name,last_name,rut,email,phone,branch,status,google_emails', { count: 'exact' })
       .order('last_name').order('id').range(offset, offset + 999);
     if (error) { loadFailed = true; break; }
     people.push(...(data || []));

@@ -1,3 +1,4 @@
+import { orderedEmails } from './details.ts';
 import type { Person } from './server';
 import { normalizeEmail, sameContact, type ContactData } from './merge.ts';
 export const identityType='app-socios-sindicato2';
@@ -6,7 +7,7 @@ export function chooseNewContact(member:ContactData & {id:string},contacts:Perso
   if(identified.length>1)return {kind:'conflict'};
   if(identified.length===1)return used.has(identified[0].resourceName)?{kind:'conflict'}:{kind:'existing',person:identified[0]};
   const email=normalizeEmail(member.email);
-  const exact=contacts.filter(p=>!used.has(p.resourceName)&&email&&p.emailAddresses?.some(e=>normalizeEmail(e.value)===email)&&sameContact(member,{first_name:p.names?.[0]?.givenName||'',last_name:p.names?.[0]?.familyName||'',email:p.emailAddresses?.[0]?.value||null,phone:p.phoneNumbers?.[0]?.value||null}));
+  const exact=contacts.filter(p=>!used.has(p.resourceName)&&email&&p.emailAddresses?.some(e=>normalizeEmail(e.value)===email)&&sameContact(member,{first_name:p.names?.[0]?.givenName||'',last_name:p.names?.[0]?.familyName||'',email:orderedEmails(p.emailAddresses)[0]?.value||null,phone:p.phoneNumbers?.[0]?.value||null}));
   if(exact.length>1)return {kind:'conflict'};
   if(exact.length===1)return {kind:'existing',person:exact[0]};
   // Shared email addresses alone do not identify a person; create a separately marked contact.
