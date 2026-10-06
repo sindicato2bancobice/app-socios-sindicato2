@@ -41,10 +41,8 @@ Todas las tablas expuestas tienen RLS. Los socios solo pueden ver su ficha y env
 
 La integración sincroniza nombre, apellidos, correo y teléfono de fichas existentes
 con `directiva@sindicato2bancobice.cl`. No transmite RUT, fechas,
-notas ni información laboral. El estado sindical se refleja en tres etiquetas de Google. Las eliminaciones confirmadas en la app se propagan a Google. Los contactos sin ficha
-no se convierten automáticamente en socios. Para la primera vinculación, el correo
-debe ser único y los cuatro campos deben coincidir; las diferencias se muestran
-para revisión. Después, una comparación con la última versión sincronizada combina
+notas ni información laboral. El estado sindical se refleja en tres etiquetas de Google. Las eliminaciones confirmadas en la app se propagan a Google; las bajas confirmadas por consulta directa a Google se reflejan en la app. Los contactos sin ficha
+no se convierten automáticamente en socios. La primera vinculación reutiliza un contacto sin vínculo cuando coinciden los cuatro campos. Las fichas nuevas se crean con un identificador externo propio, incluso si comparten correo. Los reintentos buscan ese identificador antes de crear. Después, una comparación con la última versión sincronizada combina
 cambios independientes y bloquea conflictos en el mismo campo.
 
 1. Aplica `supabase/migrations/202610050001_google_contacts.sql`.
@@ -101,7 +99,7 @@ El recurso de Google se guarda en una cola privada antes de eliminar el vínculo
 La próxima sincronización procesa eliminaciones secuencialmente; una caída conserva
 los pendientes. Las respuestas vacías y 404 permiten reintentos seguros. Se mantienen
 las marcas de eliminación para impedir reimportaciones y vinculaciones por listados
-obsoletos. Un contacto eliminado solo en Google conserva su ficha para revisión.
+obsoletos. Un contacto cuya baja confirma Google elimina también la ficha; se registra en auditoría y se conserva una marca de baja, sin enviar un DELETE al contacto sobreviviente.
 
 Validar en un entorno de prueba antes de producción: aplicar la migración, eliminar
 una ficha vinculada, comprobar auditoría, relaciones y cola; sincronizar y verificar
@@ -126,3 +124,19 @@ migración ni nuevos permisos OAuth (utiliza el alcance Contacts existente).
 Validación en producción tras desplegar: cambiar una ficha vinculada a Adherente,
 sincronizar y comprobar la etiqueta; repetir con Inactivo y Socio activo. Verificar
 que una etiqueta personal adicional se conserva y repetir sin cambios.
+
+## Bajas y fusiones originadas en Google
+
+Aplicar `20261006183441_google_remote_reconciliation.sql` antes de desplegar.
+La consulta por lotes distingue NOT_FOUND explícito de una respuesta incompleta
+o un error de autorización/cuota. Solo la baja confirmada permite retirar una ficha.
+Una lista que todavía incluye el recurso contradice la baja y obliga a reintentar.
+Si Google devuelve otro recurso, se actualiza el vínculo; si ya pertenece a otra
+ficha, se retira únicamente la ficha duplicada. Los vínculos y fichas se actualizan
+en una transacción con control de versión y bloqueo. La auditoría conserva el
+registro previo y la referencia al sobreviviente. Solicitudes y vínculos de una
+ficha retirada se eliminan por FK; el perfil pierde su asociación sin borrar Auth.
+
+Las altas nuevas incluyen `externalIds` con el UUID de la ficha, sin RUT ni datos
+laborales. Correos compartidos no provocan vinculación a otra persona ni bloquean
+la creación. Identificadores externos duplicados requieren revisión.
