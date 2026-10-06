@@ -1,3 +1,36 @@
-import Link from "next/link";import { Plus,Search,UsersRound } from "lucide-react";import { requireUser } from "@/lib/auth";
-export default async function PeoplePage({searchParams}:{searchParams:Promise<{q?:string;status?:string;created?:string;deleted?:string}>}){const params=await searchParams;const{supabase,profile}=await requireUser();if(profile?.role==="member")return <div className="card"><h2>Acceso restringido</h2><p>Tu ficha personal está disponible en “Mi perfil”.</p></div>;let query=supabase.from("members").select("id,first_name,last_name,rut,email,phone,branch,status,created_at").order("last_name");if(params.status)query=query.eq("status",params.status);if(params.q)query=query.or(`first_name.ilike.%${params.q}%,last_name.ilike.%${params.q}%,email.ilike.%${params.q}%,rut.ilike.%${params.q}%`);const{data,error}=await query;return <><div className="page-heading"><div><span className="eyebrow">DIRECTORIO</span><h1>Socios y adherentes</h1><p>Consulta y administra la información registrada.</p></div>{["administrator","director"].includes(profile?.role||"")&&<Link className="button" href="/panel/personas/nueva"><Plus size={17}/> Nueva persona</Link>}</div>{params.created&&<div className="success-banner">La persona fue registrada correctamente. En cualquier estado, se enviará a Google en la próxima sincronización.</div>}{params.deleted&&<div className="success-banner">Ficha eliminada. Si estaba vinculada a Google, la eliminación se completará en la próxima sincronización.</div>}<form className="filters"><label className="search-field"><Search/><input name="q" defaultValue={params.q} placeholder="Buscar por nombre, RUT o correo"/></label><select name="status" defaultValue={params.status||""}><option value="">Todos los estados</option><option value="active_member">Socios activos</option><option value="adherent">Adherentes</option><option value="inactive_member">Inactivos</option></select><button className="button secondary">Filtrar</button></form><article className="card table-card">{error?<div className="error-banner">No fue posible cargar los registros.</div>:data?.length?<div className="table-wrap"><table className="table"><thead><tr><th>Persona</th><th>RUT</th><th>Contacto</th><th>Sucursal</th><th>Estado</th></tr></thead><tbody>{data.map(p=><tr key={p.id}><td><div className="person-cell"><div className="person-avatar">{p.first_name[0]}{p.last_name[0]}</div>{["administrator","director"].includes(profile?.role||"")?<Link href={`/panel/personas/${p.id}`}><strong>{p.first_name} {p.last_name}</strong></Link>:<strong>{p.first_name} {p.last_name}</strong>}</div></td><td>{p.rut||"—"}</td><td><span>{p.email||"—"}</span><small>{p.phone}</small></td><td>{p.branch||"—"}</td><td><Status value={p.status}/></td></tr>)}</tbody></table></div>:<div className="large-empty"><UsersRound/><h2>No hay registros</h2><p>Agrega la primera persona o cambia los filtros de búsqueda.</p></div>}</article></>}
-function Status({value}:{value:string}){const map:Record<string,[string,string]>={active_member:["Socio",""],adherent:["Adherente","adherent"],inactive_member:["Inactivo","inactive"]};const[label,css]=map[value]||[value,""];return <span className={`badge ${css}`}>{label}</span>}
+import Link from 'next/link';
+import { Plus } from 'lucide-react';
+import { requireUser } from '@/lib/auth';
+import { Directory, type DirectoryPerson } from './directory';
+
+export default async function PeoplePage({ searchParams }: {
+  searchParams: Promise<{ q?: string; status?: string; created?: string; deleted?: string }>;
+}) {
+  const params = await searchParams;
+  const { supabase, profile } = await requireUser();
+  if (!profile?.active || !['administrator', 'director', 'collaborator'].includes(profile.role)) {
+    return <div className="card"><h2>Acceso restringido</h2><p>Tu ficha personal está disponible en “Mi perfil”.</p></div>;
+  }
+  // Read every permitted row so totals and local filtering never stop at the API page limit.
+  const people: DirectoryPerson[] = [];
+  let loadFailed = false;
+  for (let offset = 0; ;) {
+    const { data, error, count } = await supabase.from('members')
+      .select('id,first_name,last_name,rut,email,phone,branch,status', { count: 'exact' })
+      .order('last_name').order('id').range(offset, offset + 999);
+    if (error) { loadFailed = true; break; }
+    people.push(...(data || []));
+    if (people.length >= (count ?? 0)) break;
+    if (!data?.length) { loadFailed = true; break; }
+    offset += data.length;
+  }
+  const canEdit = ['administrator', 'director'].includes(profile.role);
+  const initialStatus = ['active_member', 'adherent', 'inactive_member'].includes(params.status || '') ? params.status! : '';
+
+  return <>
+    <div className="page-heading"><div><span className="eyebrow">DIRECTORIO</span><h1>Socios y adherentes</h1><p>Consulta y administra la información registrada.</p></div>{canEdit && <Link className="button" href="/panel/personas/nueva"><Plus size={17} /> Nueva persona</Link>}</div>
+    {params.created && <div className="success-banner">La persona fue registrada correctamente. En cualquier estado, se enviará a Google en la próxima sincronización.</div>}
+    {params.deleted && <div className="success-banner">Ficha eliminada. Si estaba vinculada a Google, la eliminación se completará en la próxima sincronización.</div>}
+    {loadFailed ? <div className="error-banner">No fue posible cargar los registros. Recarga para intentar nuevamente.</div> : <Directory key={`${params.q || ''}:${initialStatus}`} people={people} canEdit={canEdit} initialQuery={params.q || ''} initialStatus={initialStatus} />}
+  </>;
+}
