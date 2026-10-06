@@ -9,6 +9,7 @@ export async function importGoogleContacts(){
     const token=await accessToken();let pageToken:string|undefined;const contacts:Person[]=[];
     do{const params=new URLSearchParams({personFields,pageSize:'1000',sources:'READ_SOURCE_TYPE_CONTACT'});if(pageToken)params.set('pageToken',pageToken);const page=await people<{connections?:Person[];nextPageToken?:string}>(token,`people/me/connections?${params}`);contacts.push(...page.connections||[]);pageToken=page.nextPageToken;}while(pageToken);
     const {data:links,error:linksError}=await db.from('google_contact_links').select('resource_name');if(linksError)throw linksError;const existing=new Set((links||[]).map(l=>l.resource_name));
+    const {data:deletions,error:deleteError}=await db.from('google_contact_deletions').select('resource_name');if(deleteError)throw deleteError;for(const d of deletions||[])existing.add(d.resource_name);
     let processed=0;
     for(const person of contacts){if(existing.has(person.resourceName)){skipped++;continue;}
       const contact=importContact(person);if(!contact){issues.push('Contacto sin nombre: no importado');continue;}

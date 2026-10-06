@@ -13,3 +13,22 @@ export async function updateMember(form:FormData){
   const {data,error}=await supabase.from('members').update(updates).eq('id',id).eq('updated_at',stamp).select('id');if(error)fail('No fue posible guardar. Revisa los datos ingresados.');if(!data?.length)fail('La ficha cambió mientras la editabas. Recarga y revisa antes de guardar.');
   revalidatePath('/panel');revalidatePath('/panel/personas');revalidatePath(`/panel/personas/${id}`);redirect(`/panel/personas/${id}?saved=1`);
 }
+
+export async function deleteMember(form:FormData){
+  const {profile,userId}=await requireUser();
+  if(!profile?.active||!['administrator','director'].includes(profile.role))throw new Error('No autorizado');
+  const id=String(form.get('id')||'');
+  if(form.get('confirmed')!=='yes')throw new Error('Confirma la eliminación');
+  const {adminClient}=await import('@/lib/google/server');
+  const {randomUUID}=await import('node:crypto');
+  const db=adminClient();const owner=randomUUID();let message='';
+  const {data:locked,error:lockError}=await db.rpc('google_sync_acquire',{owner});
+  if(lockError||!locked)message='Hay una operación en curso. Espera y vuelve a intentar.';
+  else try{
+    const {data,error}=await db.rpc('delete_member_contact',{member:id,stamp:String(form.get('updated_at')||''),actor:userId,lock_owner:owner});
+    if(error)message='No fue posible eliminar la ficha. Intenta nuevamente.';
+    else if(!data)message='La ficha cambió. Recarga y revisa antes de eliminar.';
+  }finally{await db.rpc('google_sync_release',{owner});}
+  if(message)redirect(`/panel/personas/${encodeURIComponent(id)}?error=${encodeURIComponent(message)}`);
+  revalidatePath('/panel');revalidatePath('/panel/personas');revalidatePath('/panel/google');redirect('/panel/personas?deleted=1');
+}
