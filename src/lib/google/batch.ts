@@ -5,7 +5,7 @@ export async function readLinkedContacts(resources:string[],read:(path:string)=>
   const unique=[...new Set(resources)];
   // Keep URLs small while replacing hundreds of individual reads.
   for(let offset=0;offset<unique.length;offset+=50){
-    const query=new URLSearchParams({personFields:'names,emailAddresses,phoneNumbers,metadata',sources:'READ_SOURCE_TYPE_CONTACT'});
+    const query=new URLSearchParams({personFields:'names,emailAddresses,phoneNumbers,metadata,memberships',sources:'READ_SOURCE_TYPE_CONTACT'});
     for(const resource of unique.slice(offset,offset+50))query.append('resourceNames',resource);
     const result=await read(`people:batchGet?${query}`);
     for(const entry of result.responses||[]){

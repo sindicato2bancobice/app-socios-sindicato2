@@ -16,8 +16,8 @@ export async function accessToken() {
   const response=await fetch('https://oauth2.googleapis.com/token',{method:'POST',body:new URLSearchParams({client_id:process.env.GOOGLE_CLIENT_ID!,client_secret:process.env.GOOGLE_CLIENT_SECRET!,refresh_token:decrypt(data.refresh_token),grant_type:'refresh_token'}),cache:'no-store'});
   const token=await response.json(); if(!response.ok || !token.access_token) throw new Error('Google requiere volver a conectar la cuenta'); return String(token.access_token);
 }
-export type Person = {resourceName:string;etag?:string;metadata?:{deleted?:boolean;sources?:{type:string;id:string;etag?:string}[]};names?:{givenName?:string;familyName?:string;displayName?:string}[];emailAddresses?:{value:string;type?:string}[];phoneNumbers?:{value:string;type?:string}[]};
-export const personFields='names,emailAddresses,phoneNumbers,metadata';
+export type Person = {resourceName:string;etag?:string;metadata?:{deleted?:boolean;sources?:{type:string;id:string;etag?:string}[]};names?:{givenName?:string;familyName?:string;displayName?:string}[];emailAddresses?:{value:string;type?:string}[];phoneNumbers?:{value:string;type?:string}[];memberships?:{contactGroupMembership?:{contactGroupResourceName:string}}[]};
+export const personFields='names,emailAddresses,phoneNumbers,metadata,memberships';
 export async function people<T>(token:string,path:string,method='GET',body?:unknown):Promise<T> {
   return googleRequest<T>(`https://people.googleapis.com/v1/${path}`,{method,headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body),cache:'no-store'});
 }

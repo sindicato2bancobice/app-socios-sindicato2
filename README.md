@@ -40,8 +40,8 @@ Todas las tablas expuestas tienen RLS. Los socios solo pueden ver su ficha y env
 ## Google Contacts (configuración pendiente)
 
 La integración sincroniza nombre, apellidos, correo y teléfono de fichas existentes
-con `directiva@sindicato2bancobice.cl`. No transmite RUT, fechas, estado sindical,
-notas ni información laboral. Las eliminaciones confirmadas en la app se propagan a Google. Los contactos sin ficha
+con `directiva@sindicato2bancobice.cl`. No transmite RUT, fechas,
+notas ni información laboral. El estado sindical se refleja en tres etiquetas de Google. Las eliminaciones confirmadas en la app se propagan a Google. Los contactos sin ficha
 no se convierten automáticamente en socios. Para la primera vinculación, el correo
 debe ser único y los cuatro campos deben coincidir; las diferencias se muestran
 para revisión. Después, una comparación con la última versión sincronizada combina
@@ -106,3 +106,23 @@ obsoletos. Un contacto eliminado solo en Google conserva su ficha para revisión
 Validar en un entorno de prueba antes de producción: aplicar la migración, eliminar
 una ficha vinculada, comprobar auditoría, relaciones y cola; sincronizar y verificar
 la eliminación en Google. Repetir con Google indisponible y con una edición concurrente.
+
+## Etiquetas de estado en Google Contacts
+
+La app/Supabase define el estado. En cada sincronización se crean o reutilizan
+las etiquetas `Sindicato 2 · Socio activo`, `Sindicato 2 · Adherente` y
+`Sindicato 2 · Inactivo`. Cada contacto vinculado recibe la etiqueta de su estado
+y pierde las otras dos etiquetas sindicales, conservando las etiquetas ajenas.
+Las etiquetas se procesan en lotes secuenciales de hasta 1000 contactos: se agrega
+primero la correcta y luego se retiran las anteriores. Los errores parciales de
+Google se reportan y pueden reintentarse.
+
+Los inactivos también sincronizan sus datos de contacto y su etiqueta; no se borran
+al cambiar de estado. Cambios manuales de etiquetas en Google no modifican el estado
+en Supabase y se corrigen en la próxima sincronización. Los conflictos de datos
+de contactos previamente vinculados no impiden actualizar su estado. No requiere
+migración ni nuevos permisos OAuth (utiliza el alcance Contacts existente).
+
+Validación en producción tras desplegar: cambiar una ficha vinculada a Adherente,
+sincronizar y comprobar la etiqueta; repetir con Inactivo y Socio activo. Verificar
+que una etiqueta personal adicional se conserva y repetir sin cambios.
