@@ -38,3 +38,10 @@ test('already absent Google contact is a safe deletion retry',async()=>{
   assert.equal(await googleRequest('https://example.invalid',{method:'DELETE'},async()=>new Response('',{status:404})),undefined);
   await assert.rejects(googleRequest('https://example.invalid',{},async()=>new Response('',{status:404})),/404/);
 });
+test('explicit NOT_FOUND is preserved as a confirmed tombstone',async()=>{
+  const result=await readLinkedContacts(['people/old'],async()=>({responses:[{requestedResourceName:'people/old',status:{code:5}}]}));
+  assert.equal(result.get('people/old')?.metadata?.deleted,true);
+});
+test('incomplete batch response aborts and cannot trigger ficha deletion',async()=>{
+  await assert.rejects(readLinkedContacts(['people/a','people/b'],async()=>({responses:[{requestedResourceName:'people/a',person:{resourceName:'people/a'}}]})),/incompleto/);
+});
