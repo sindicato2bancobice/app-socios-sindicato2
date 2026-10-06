@@ -1,4 +1,5 @@
 'use server';
+import { parseEmails } from '@/lib/google/details';
 import { requireUser } from '@/lib/auth';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
@@ -7,9 +8,12 @@ export async function updateMember(form:FormData){
   const id=String(form.get('id')||'');const stamp=String(form.get('updated_at')||'');const value=(key:string)=>String(form.get(key)||'').trim();
   const fail=(message:string)=>redirect(`/panel/personas/${encodeURIComponent(id)}?error=${encodeURIComponent(message)}`);
   const status=value('status');if(!['active_member','adherent','inactive_member'].includes(status)||!value('first_name'))fail('Revisa el nombre y el estado');
-  const updates:Record<string,string|null>={status,first_name:value('first_name'),last_name:value('last_name')};
+  const updates:Record<string,unknown>={status,first_name:value('first_name'),last_name:value('last_name')};
   for(const key of ['rut','email','phone','birth_date','branch','department','job_title','bank_joined_at','union_joined_at'])updates[key]=value(key)||null;
-  if(updates.rut)updates.rut=updates.rut.toUpperCase();
+  if(typeof updates.rut==='string')updates.rut=updates.rut.toUpperCase();
+  if(form.has('google_emails')){
+    try{const emails=parseEmails(value('google_emails'));updates.google_emails=emails;updates.email=emails[0]?.value||null;}catch{fail('Revisa los correos y sus etiquetas.');}
+  }
   const {data,error}=await supabase.from('members').update(updates).eq('id',id).eq('updated_at',stamp).select('id');if(error)fail('No fue posible guardar. Revisa los datos ingresados.');if(!data?.length)fail('La ficha cambió mientras la editabas. Recarga y revisa antes de guardar.');
   revalidatePath('/panel');revalidatePath('/panel/personas');revalidatePath(`/panel/personas/${id}`);redirect(`/panel/personas/${id}?saved=1`);
 }

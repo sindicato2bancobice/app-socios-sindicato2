@@ -1,5 +1,6 @@
 'use client';
 
+import type { GoogleEmail } from '@/lib/google/details';
 import Link from 'next/link';
 import { Search, UsersRound } from 'lucide-react';
 import { useState } from 'react';
@@ -13,6 +14,7 @@ export type DirectoryPerson = {
   phone: string | null;
   branch: string | null;
   status: string;
+  google_emails?: GoogleEmail[] | null;
 };
 
 const states: Record<string, [string, string]> = {
@@ -33,7 +35,7 @@ export function Directory({ people, canEdit, initialQuery, initialStatus }: {
   const terms = normalize(query.trim()).split(/\s+/).filter(Boolean);
   const results = people.filter(person => {
     if (status && person.status !== status) return false;
-    const fields = [person.first_name, person.last_name, `${person.first_name} ${person.last_name}`, person.rut, person.email, person.phone].map(value => normalize(value || ''));
+    const fields = [person.first_name, person.last_name, `${person.first_name} ${person.last_name}`, person.rut, person.email, person.phone, ...(person.google_emails||[]).map(email=>email.value)].map(value => normalize(value || ''));
     return terms.every(term => fields.some(value => value.includes(term)));
   });
   const filtered = Boolean(status || terms.length);

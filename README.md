@@ -140,3 +140,30 @@ ficha retirada se eliminan por FK; el perfil pierde su asociación sin borrar Au
 Las altas nuevas incluyen `externalIds` con el UUID de la ficha, sin RUT ni datos
 laborales. Correos compartidos no provocan vinculación a otra persona ni bloquean
 la creación. Identificadores externos duplicados requieren revisión.
+
+## Correos completos y direcciones de Google
+
+Aplicar `20261006185939_google_contact_details.sql` antes de desplegar. La importación
+conserva todos los correos con sus etiquetas y todas las direcciones. Las fichas ya
+vinculadas se completan al pulsar Sincronizar ahora. `null` significa pendiente de
+carga; una lista vacía significa que Google no tiene datos en ese campo.
+
+En la ficha se pueden editar, agregar y quitar correos y etiquetas personalizadas.
+El guardado valida la lista y actualiza el correo principal compatible con el
+registro anterior. La sincronización compara la lista completa con la última
+versión: cambios simultáneos diferentes se bloquean para revisión; cambios de
+orden o metadatos de presentación no generan conflictos. Al actualizar Google,
+solo se envían los campos editables de los correos y se conservan los otros campos
+del contacto. La migración de fichas antiguas no descarta correos secundarios.
+La búsqueda del directorio también incluye los correos secundarios.
+
+Las direcciones se muestran con etiqueta original, texto formateado, calle,
+complemento, casilla postal, ciudad/localidad, región, código postal, país y código
+de país cuando Google los provee. Son de consulta: se actualizan desde Google y
+no se clasifican automáticamente como ubicación laboral. El filtro por zona de
+trabajo queda para una etapa posterior.
+
+Validación después del despliegue: sincronizar una ficha con varios correos y
+etiquetas personalizadas y con dos direcciones; revisar todos los datos en la app.
+Editar un correo secundario, sincronizar y verificarlo en Google; luego probar
+agregar/quitar uno y comprobar que se mantienen los restantes y las direcciones.
