@@ -31,3 +31,10 @@ test('long Retry-After stops immediately',async()=>{
 test('uncertain create failure is never automatically retried',async()=>{
   let calls=0;await assert.rejects(googleRequest('https://example.invalid',{method:'POST'},async()=>{calls++;throw new Error('network');},async()=>{}));assert.equal(calls,1);
 });
+test('Google deletion accepts an empty success response',async()=>{
+  assert.equal(await googleRequest('https://example.invalid',{method:'DELETE'},async()=>new Response(null,{status:204})),undefined);
+});
+test('already absent Google contact is a safe deletion retry',async()=>{
+  assert.equal(await googleRequest('https://example.invalid',{method:'DELETE'},async()=>new Response('',{status:404})),undefined);
+  await assert.rejects(googleRequest('https://example.invalid',{},async()=>new Response('',{status:404})),/404/);
+});

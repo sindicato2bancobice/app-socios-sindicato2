@@ -1,7 +1,8 @@
 export async function googleRequest<T>(url:string,options:RequestInit,fetcher:typeof fetch=fetch,wait:(ms:number)=>Promise<void>=ms=>new Promise(resolve=>setTimeout(resolve,ms))):Promise<T>{
   for(let attempt=0;attempt<3;attempt++){
     const response=await fetcher(url,{...options,signal:AbortSignal.timeout(15000)});
-    if(response.ok)return response.json();
+    if(response.ok){const body=await response.text();return (body?JSON.parse(body):undefined) as T;}
+    if(options.method==='DELETE' && response.status===404)return undefined as T;
     if(response.status===429){
       const header=response.headers.get('Retry-After');
       const seconds=header===null?NaN:Number(header);

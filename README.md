@@ -41,7 +41,7 @@ Todas las tablas expuestas tienen RLS. Los socios solo pueden ver su ficha y env
 
 La integración sincroniza nombre, apellidos, correo y teléfono de fichas existentes
 con `directiva@sindicato2bancobice.cl`. No transmite RUT, fechas, estado sindical,
-notas ni información laboral. No borra fichas o contactos. Los contactos sin ficha
+notas ni información laboral. Las eliminaciones confirmadas en la app se propagan a Google. Los contactos sin ficha
 no se convierten automáticamente en socios. Para la primera vinculación, el correo
 debe ser único y los cuatro campos deben coincidir; las diferencias se muestran
 para revisión. Después, una comparación con la última versión sincronizada combina
@@ -59,9 +59,12 @@ cambios independientes y bloquea conflictos en el mismo campo.
 5. Despliega y, como administrador, abre Google Contacts → Conectar Google.
    Autoriza exclusivamente la cuenta del sindicato. Pulsa Sincronizar ahora y
    verifica el contacto de prueba en ambos sistemas.
-6. Para sincronización periódica configura un programador que invoque
-   `GET /api/google/cron` con `Authorization: Bearer <CRON_SECRET>`.
-   El programador aún no está configurado. Los cambios no son instantáneos.
+6. Aplica `supabase/migrations/20261006170943_contact_deletions.sql` antes de desplegar.
+   `vercel.json` programa `GET /api/google/cron` una vez al día a las 09:00 UTC,
+   compatible con Hobby. Vercel envía `Authorization: Bearer <CRON_SECRET>`.
+   Configura ese secreto en producción; los cron solo se ejecutan en producción.
+   La hora en Chile varía con el horario de verano y Hobby puede ejecutar dentro
+   de la hora siguiente. Los cambios no son instantáneos.
 
 Los tokens se cifran con AES-256-GCM y las tablas de credenciales, vínculos y bloqueo
 solo permiten acceso al servidor. No cambies la clave de cifrado sin volver a conectar.
@@ -86,3 +89,20 @@ Cada inserción crea ficha y vínculo en una transacción; reintentar conserva l
 fichas ya importadas. En Personas, pulsa el nombre para editar. El guardado usa
 control de versión para no sobrescribir una edición o sincronización concurrente.
 Los cambios de nombre, correo y teléfono se envían con Sincronizar ahora.
+
+## Eliminar contactos
+
+Administradores y directores activos pueden eliminar desde la ficha, tras confirmar.
+La transacción valida el rol y la versión de la ficha, registra el actor en auditoría,
+elimina sus solicitudes (FK cascade) y desvincula su perfil (FK set null). No elimina
+la cuenta de acceso. Para conservar el historial, usar estado Inactivo.
+
+El recurso de Google se guarda en una cola privada antes de eliminar el vínculo.
+La próxima sincronización procesa eliminaciones secuencialmente; una caída conserva
+los pendientes. Las respuestas vacías y 404 permiten reintentos seguros. Se mantienen
+las marcas de eliminación para impedir reimportaciones y vinculaciones por listados
+obsoletos. Un contacto eliminado solo en Google conserva su ficha para revisión.
+
+Validar en un entorno de prueba antes de producción: aplicar la migración, eliminar
+una ficha vinculada, comprobar auditoría, relaciones y cola; sincronizar y verificar
+la eliminación en Google. Repetir con Google indisponible y con una edición concurrente.

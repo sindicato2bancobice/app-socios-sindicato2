@@ -1,6 +1,7 @@
 import 'server-only';
 import { randomUUID } from 'node:crypto';
 import { accessToken, adminClient, people, personFields, type Person } from './server';
+import { processDeletions } from './deletions';
 import { readLinkedContacts } from './batch';
 import { fields, mergeContact, normalizeEmail, sameContact, type ContactData } from './merge';
 type Member=ContactData & {id:string;updated_at:string;google_resource_name:string|null};
@@ -12,10 +13,15 @@ export async function syncContacts() {
   const conflicts:string[]=[];let synced=0;
   try {
     const token=await accessToken();
+    const {data:deletions,error:deleteError}=await db.from('google_contact_deletions').select('resource_name,completed_at');if(deleteError)throw deleteError;
+    const excluded=new Set((deletions||[]).map(d=>d.resource_name));
+    await processDeletions((deletions||[]).filter(d=>!d.completed_at).map(d=>d.resource_name),
+      resource=>people(token,`${resource}:deleteContact`,'DELETE'),
+      async resource=>{const {error}=await db.from('google_contact_deletions').update({completed_at:new Date().toISOString()}).eq('resource_name',resource);if(error)throw error;});
     // Full paginated reads also recover deleted contacts and expired incremental tokens.
     const all:Person[]=[];let pageToken:string|undefined;
     do {const query=new URLSearchParams({personFields,pageSize:'1000',sources:'READ_SOURCE_TYPE_CONTACT'});if(pageToken)query.set('pageToken',pageToken);
-      const page=await people<{connections?:Person[];nextPageToken?:string}>(token,`people/me/connections?${query}`);all.push(...page.connections||[]);pageToken=page.nextPageToken;
+      const page=await people<{connections?:Person[];nextPageToken?:string}>(token,`people/me/connections?${query}`);all.push(...(page.connections||[]).filter(p=>!excluded.has(p.resourceName)));pageToken=page.nextPageToken;
     }while(pageToken);
     const {data:members,error}=await db.from('members').select('id,first_name,last_name,email,phone,updated_at,google_resource_name').neq('status','inactive_member');if(error)throw error;
     const {data:links,error:linkError}=await db.from('google_contact_links').select('*');if(linkError)throw linkError;
